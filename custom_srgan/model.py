@@ -62,38 +62,38 @@ class Generator(nn.Module):
         return torch.tanh(self.output(upsampled))
 
 class Discriminator(nn.Module):
-    def __init__(self, input_size=96):
+    def __init__(self):
         super(Discriminator, self).__init__()
+
         def block(in_channels, out_channels, stride):
-            layers = [
+            return nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1),
                 nn.BatchNorm2d(out_channels),
                 nn.LeakyReLU(0.2, inplace=True)
-            ]
-            return layers
+            )
 
-        self.model = nn.Sequential(
+        self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(0.2, inplace=True),
-            *block(64, 64, 2),
-            *block(64, 128, 1),
-            *block(128, 128, 2),
-            *block(128, 256, 1),
-            *block(256, 256, 2),
-            *block(256, 512, 1),
-            *block(512, 512, 2),
+            block(64, 64, 2),
+            block(64, 128, 1),
+            block(128, 128, 2),
+            block(128, 256, 1),
+            block(256, 256, 2),
+            block(256, 512, 1),
+            block(512, 512, 2),
         )
 
-        fc_input_size = (input_size // 16) ** 2 * 512
-        self.adv_head = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(fc_input_size, 1024),
+        # New: Use global average pooling to adapt to any input size
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),  # output shape: (batch, 512, 1, 1)
+            nn.Flatten(),             # -> (batch, 512)
+            nn.Linear(512, 1024),
             nn.LeakyReLU(0.2, inplace=True),
             nn.Linear(1024, 1),
             nn.Sigmoid()
         )
 
     def forward(self, x):
-        features = self.model(x)
-        return self.adv_head(features)
-
+        features = self.features(x)
+        return self.classifier(features)
